@@ -45,10 +45,10 @@ class GenerateZeoliteConfig(object):
 
     def __init__(self,FW,Ads,pop_size,n_ads,Start_Set=[],Parent_Set=[]):
         """ initialize class object """
+        self.n_ads = n_ads
         self.FW = FW
         self.Ads = Ads
         self.pop_size = pop_size
-        self.n_ads = n_ads
         self.Start_Set = Start_Set
         self.Parent_Set = Parent_Set
         
@@ -57,8 +57,17 @@ class GenerateZeoliteConfig(object):
         self.ads_cell = ads_cell
         ads_cell = self.ads_cell
         Ads_cell = [[ads_cell[0],0,0],[0,ads_cell[1],0],[0,0,ads_cell[2]]]
-        self.Ads.set_cell(Ads_cell)
-        self.Ads.center()
+
+        if self.n_ads == 1:
+            self.Ads.set_cell(Ads_cell)
+            self.Ads.center()
+
+        if self.n_ads == 2:
+            self.Ads[0].set_cell(Ads_cell)
+            self.Ads[0].center()
+            self.Ads[1].set_cell(Ads_cell)
+            self.Ads[1].center()
+            
 
     def construct_init_parent(self,ads_cell,ads_pos):
         """ construct the initial set of parents """
@@ -67,27 +76,51 @@ class GenerateZeoliteConfig(object):
         Ads_vol = ads_cell[0] * ads_cell[1] * ads_cell[2]
         Ads_cell = [[ads_cell[0],0,0],[0,ads_cell[1],0],[0,0,ads_cell[2]]]
 
-        Atom_Num = self.Ads.get_atomic_numbers()                                # get atomic numbers of your adsorbate
+        if self.n_ads == 1:
+            Atom_Num = self.Ads.get_atomic_numbers() # get atomic numbers of your adsorbate
+        if self.n_ads == 2:
+            TEMP_for_num = self.Ads[0] + self.Ads[1]
+            Atom_Num = TEMP_for_num.get_atomic_numbers()
+            #Atom_Num.append(self.Ads[1].get_atomic_numbers())
+
         unique_atom_types = get_all_atom_types(self.FW, Atom_Num)               # get atomic numbers of your system
         cd = closest_distances_generator(atom_numbers=unique_atom_types,
                                         ratio_of_covalent_radii=0.7)            # Generate a dictionary of closest distances
 
         pop=self.pop_size
 
-        sg = StartGenerator([(self.Ads,self.n_ads)],                            # Generator Parameters
-                            cd,
-                            Ads_vol,
-                            cell = Ads_cell)
+        if self.n_ads == 1:
 
-        starting_population = [sg.get_new_candidate() for i in range(pop)]
-                            
-        for i in range(pop):
-            TEMPMOL = self.FW +  starting_population[i]                        # Add the adsorbates to the frame work
-            self.Start_Set.append(TEMPMOL)
+            sg = StartGenerator([(self.Ads,self.n_ads)],                            # Generator Parameters
+                                cd,
+                                Ads_vol,
+                                cell = Ads_cell)
+
+            starting_population = [sg.get_new_candidate() for i in range(pop)]
+
+            for i in range(pop):
+                TEMPMOL = self.FW +  starting_population[i]                        # Add the adsorbates to the frame work
+                self.Start_Set.append(TEMPMOL)
+
+            num = len(self.Ads)
+
+        if self.n_ads == 2:
+
+            sg = StartGenerator([(self.Ads[0],1),(self.Ads[1],1)],
+                                cd,
+                                Ads_vol,
+                                cell = Ads_cell)
+
+            starting_population = [sg.get_new_candidate() for i in range(pop)]
+
+            for i in range(pop):
+                TEMPMOL = self.FW + starting_population[i]
+                self.Start_Set.append(TEMPMOL)
             
-            
+            num = len(self.Ads[0]) + len(self.Ads[1])
+
         Cent_Pos = self.ads_pos
-        num = len(self.Ads)*self.n_ads
+        #num = len(self.Ads)*self.n_ads
         Fin_atoms = np.linspace(0,num-1,num)
 
         for i in range(pop):
@@ -98,25 +131,27 @@ class GenerateZeoliteConfig(object):
                 self.Start_Set[i][-(int(j)+1)].z = Coord[2] - Ads_cell[2][2]/2
                 
             self.Start_Set[i].wrap()
+
+        view(self.Start_Set)
         
     def remove_overlap(self,mul):
         """ remove parents with overlapping atoms """
         self.mul = mul
 
         Tot_Atoms = len(self.Start_Set[0])                                           # Get the total number of atoms
-        Num_Ads = Tot_Atoms - len(self.Ads)*self.n_ads                          # Get the index of the first adsorbate atom
-        ADS_ind = list(range(Num_Ads,Tot_Atoms))                                # Get indicies of each adsorbate
+        Num_Ads = len(self.FW)                                                  # Get the index of the first adsorbate atom
+        ADS_ind = list(range(Num_Ads,Tot_Atoms-1))                                # Get indicies of each adsorbate
 
         Nat_Cut = natural_cutoffs(self.Start_Set[0])                            # Cutoff radii to get neighbors
         Candidate_Error = []                                                    # Storage for candidate overlaps
         for i in range(self.pop_size):
-            Neigh = NeighborList(Nat_Cut,bothways=True)
+            Neigh = NeighborList(Nat_Cut,self_interaction=False,bothways=True)
             Neigh.update(self.Start_Set[i])                                     # Generate Neighbor list
     
             for a in ADS_ind:
                 indices,offsets = Neigh.get_neighbors(a)                        # Get Indicies of neighbors of adsorbate atom a  
-                indices = indices[:-1]                                          # remove adsorbate a from list leaving behind neighbors
-                indices = indices[1:]                                          
+                #indices = indices[:-1]                                          # remove adsorbate a from list leaving behind neighbors
+                #indices = indices[1:]                                          
                 Distances = self.Start_Set[i].get_distances(a,indices)               # Get the distances of atom a and its neighbors
 
                 Atom_Nat_Cut = []
@@ -130,7 +165,7 @@ class GenerateZeoliteConfig(object):
                         Atom_Nat_list += l
                 
                 Atom_Distance = Distances - Atom_Nat_list                       # Compute the overlap
-        
+                #print(Distances)
                 for num in Atom_Distance:                                       # Get Candidates with an overlap
                     if num <= 0:
                         Candidate_Error.append(i)
@@ -150,16 +185,18 @@ class GenerateZeoliteConfig(object):
                 continue
             self.Parent_Set.append(self.Start_Set[i])
 
+        view(self.Parent_Set)
         
 class DB_Prep(object):
 
     """ Updates DB for GA """
 
-    def __init__(self,db_name,directory,FW,Ads):
+    def __init__(self,db_name,directory,FW,Ads,n_ads):
         self.db_name = db_name
         self.directory = directory
         self.FW = FW
         self.Ads = Ads
+        self.n_ads = n_ads
 
     def update_db(self):
         """ update the db with computed energies"""
@@ -169,8 +206,12 @@ class DB_Prep(object):
         
         for i in range(2,rows):
             calc = Vasp(self.directory.format(int(i)))
+            #print(i)
             a = calc.get_atoms()
-            a.set_tags(np.concatenate((np.zeros(len(self.FW)),np.ones(len(self.Ads)))))
+            if self.n_ads == 1:
+                a.set_tags(np.concatenate((np.zeros(len(self.FW)),np.ones(len(self.Ads)))))
+            if self.n_ads == 2:
+                a.set_tags(np.concatenate((np.zeros(len(self.FW)),np.ones(len(self.Ads[0])),np.ones(len(self.Ads[1]))+1)))
             db.update(i,a,relaxed=False)
 
     def prep_db(self):
