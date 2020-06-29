@@ -132,7 +132,7 @@ class GenerateZeoliteConfig(object):
                 
             self.Start_Set[i].wrap()
 
-        view(self.Start_Set)
+        #view(self.Start_Set)
         
     def remove_overlap(self,mul):
         """ remove parents with overlapping atoms """
