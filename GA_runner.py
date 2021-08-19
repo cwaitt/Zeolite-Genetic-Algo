@@ -13,6 +13,7 @@ from ase.visualize import view
 from ase import Atoms
 from pathlib import Path
 from ase.calculators.vasp import Vasp
+from ase.db import connect
 
 
 # GA modules
@@ -66,7 +67,9 @@ class GenerateParent(object):
         sg = StartGenerator(slab = self.FW,
                            blocks = blck,
                            blmin = cd,
-                           box_to_place_in = [ads_pos,np.array(cell)])
+                           #box_to_place_in = None,
+                           box_to_place_in = [ads_pos,np.array(cell)])#,
+                           #test_too_far = False)
 
         starting_population = [sg.get_new_candidate() for i in range(self.pop_size)]
 
@@ -81,25 +84,37 @@ class UpdateDB(object):
 
     def update(self):
         da = DataConnection(self.DB)
-        while da.get_number_of_unrelaxed_candidates() > 0:
-            a = da.get_an_unrelaxed_candidate()
-            tg = a.get_tags()
-            num = a.info['confid']
-            print('Updating candidate {0}'.format(num))
+        db = connect(self.DB)
+        store_num=0
 
-            calc = Vasp(directory = './Candidates/Can-{:02d}'.format(num))
-            calc.read()
+        if da.get_number_of_unrelaxed_candidates() == 0:
+            store_num = db.count()
+            print('DB has already been updated')
 
-            struct = calc.get_atoms()
-            struct.set_tags(tg)
+        else:
+            while da.get_number_of_unrelaxed_candidates() > 0:
+                a = da.get_an_unrelaxed_candidate()
+                tg = a.get_tags()
+                num = a.info['confid']
 
-            da.c.update(num,
-                        atoms = struct,
-                        origin = 'StartingCandidateRelaxed',
-                        raw_score = -1*calc.get_potential_energy(),
-                        relaxed = True)
+                store_num = num
+                print('Updating candidate {0}'.format(num))
 
-        return num
+                calc = Vasp(directory = './Candidates/Can-{:02d}'.format(num))
+                calc.read()
+
+                struct = calc.get_atoms()
+                struct.set_tags(tg)
+
+                da.c.update(num,
+                            atoms = struct,
+                            origin = 'StartingCandidateRelaxed',
+                            raw_score = -1*calc.get_potential_energy(),
+                            relaxed = True)
+
+            store_num = db.count()
+
+        return store_num
 
 
 class GenerateChild(object):
@@ -135,6 +150,7 @@ class GenerateChild(object):
         for i in range(1,self.n+1):
             print('Now starting configuration number {0}'.format(i+self.num))
             parents = self.pop.get_two_candidates()
+            #parents = self.pop.get_one_candidate()
             op = self.operation.get_operator()
             offspring, desc = op.get_new_individual(parents)
 
