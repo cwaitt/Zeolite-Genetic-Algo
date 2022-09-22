@@ -5,7 +5,7 @@
 ### Date Created:   03/04/20                                                              ###
 ### Date Modified:  07/09/21                                                              ###
 #############################################################################################
-#
+
 # General ASE and Python Modules Modules
 import numpy as np
 from ase.io import read, write
@@ -82,7 +82,7 @@ class UpdateDB(object):
     def __init__(self,DB):
         self.DB = DB
 
-    def update(self):
+    def update(self,direct):
         da = DataConnection(self.DB)
         db = connect(self.DB)
         store_num=0
@@ -100,7 +100,8 @@ class UpdateDB(object):
                 store_num = num
                 print('Updating candidate {0}'.format(num))
 
-                calc = Vasp(directory = './Candidates/Can-{:02d}'.format(num))
+                #calc = Vasp(directory = './Candidates/Can-{:02d}'.format(num))
+                calc = Vasp(directory = direct.format(num))
                 calc.read()
 
                 struct = calc.get_atoms()
